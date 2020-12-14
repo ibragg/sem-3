@@ -11,120 +11,84 @@
 #include <sys/ioctl.h>
 #include <string.h>
 
-#define SERVER_FIFO "/tmp/seqnum_sv"
-/* Well-known name for server's FIFO */
-#define CLIENT_FIFO_TEMPLATE "/tmp/seqnum_cl.%ld"
-/* Template for building client FIFO name */
-#define CLIENT_FIFO_NAME_LEN (sizeof(CLIENT_FIFO_TEMPLATE) + 20)
-/* Space required for client FIFO pathname
-   (+20 as a generous allowance for the PID) */
+#define ServerFIFO "FILE_FIFO"
 
-struct request {                /* Request (client --> server) */
-    pid_t pid;                  /* PID of client */
+#define PAGE_SIZE 4096
+
+
+struct Request {
+    pid_t pid;
     char filename[256];
+
 };
 
-const int SIZEOFCHAR = sizeof(char);
-const int SIZEOFPID_T = sizeof(pid_t);
-
-void Closefd(int fd, const char *msg) {
+void CloseFD(int fd) {
     if (close(fd) == -1) {
-        perror(msg);
-        exit(1);
+        perror("Client could not close the file");
+        exit(-1);
     }
 }
 
-int Openfd(const char *name, int flags, const char *msg) {
+int OpenFD(const char *name, int flags) {
 
-    int Fd = open(name, flags);
-    if (Fd == -1) {
-        perror(msg);
-        exit(1);
+    int fd;
+    if ((fd = open(name, flags)) < 0) {
+        printf("Client could not open %s \n", name);
+        exit(-1);
     }
-    return Fd;
+    return fd;
 }
-
-void DisableNONBLOCK(int fd) {
-    int flags;
-
-    flags = fcntl(fd, F_GETFL);
-    flags &= ~O_NONBLOCK;
-    fcntl(fd, F_SETFL, flags);
-
-}
-
-char clientfifo[CLIENT_FIFO_NAME_LEN];
 
 
 int main(int argc, char *argv[]) {
 
-
-    struct request req;
-
-
     if (argc != 2) {
-        printf("invalid argc\n");
-        exit(1);
+        perror("Arguments are incorrect \n");
+        exit(-1);
+    }
+
+    struct Request request;
+    request.pid = getpid();
+    strcpy(request.filename, argv[1]);
+
+
+    umask(0);
+    char ClientFIFO[64];
+    sprintf(ClientFIFO, "%d.fifo", getpid());
+
+    if (mkfifo(ClientFIFO, 0666) == -1 && errno != EEXIST) {
+        perror("Server could not make FIFO");
+        exit(-1);
     }
 
 
-    /*  */
-
-    umask(0);                   /* Делаем фифошку клиента*/
-    snprintf(clientfifo, CLIENT_FIFO_NAME_LEN, CLIENT_FIFO_TEMPLATE, (long) getpid());
-    if (mkfifo(clientfifo, 0666) == -1 && errno != EEXIST) {
-        perror("mkfifo");
-        exit(1);
-    }
+    int serverFd = OpenFD(ServerFIFO, O_WRONLY);
 
 
+    write(serverFd, &request, sizeof(struct Request));
 
-    /* создаем запрос, открываем трубу сервера */
-
-    req.pid = getpid();
-    strcpy(req.filename, argv[1]);
-
-    int serverFd = Openfd(SERVER_FIFO, O_WRONLY | O_NONBLOCK, "");
-    DisableNONBLOCK(serverFd);
+    int clientFd = OpenFD(ClientFIFO, O_RDONLY);
 
 
+    char buf[PAGE_SIZE] = "";
+    int RD = PAGE_SIZE;
 
-    /* открываем нашу трубу, если открывать без нонблока то она будет ждать пока откроется второй конец, нам это не нужно */
-    int clientFd = Openfd(clientfifo, O_RDONLY | O_NONBLOCK, "file receiverFd open");
-    DisableNONBLOCK(clientFd);  /* выключаем нонблок и переходим в блокирующий режим */
 
-    /* после того как все сделали пише серверу запрос */
-    write(serverFd, &req, sizeof(struct request));
+    for (;;) {
 
-    char buf[PIPE_BUF] = "";
-    int indicator = 0;
-    int reallength = PIPE_BUF;
-
-    /* внутренний цикл нужен для того чтобы ждать ответа сервера только определенное время */
-
-    while (reallength == PIPE_BUF &&
-           !buf[0]) {   /* первый байт каждого сообщения это 0 если оно не последнее и 1 если последнее */
-        int i = 0;
-        while (i < 5)  /*  ждем до 5 секунд*/
-        {
-            ioctl(clientFd, FIONREAD, &indicator);  /* проверить если ли инфа в трубе */
-            if (indicator) {
-                break;
-            }
-            i++;
-            sleep(1);
-        }
-
-        if (i == 5) {     /* если 5 секунд прошли то ошибка */
-            printf("server failed or going too slow\n");
-            exit(1);
-        }
-        reallength = read(clientFd, buf, PIPE_BUF);
-        write(STDOUT_FILENO, buf + 1, reallength - 1);
+        if ((RD = read(clientFd, buf, PAGE_SIZE)) < 0) {
+            perror("Client could not read from FIFO");
+            exit(-1);
+        };
+        if (!RD) break;
+        if ((write(1, buf, RD)) < 0) {
+            perror("Client could not write correctly");
+            exit(-1);
+        };
 
     }
 
-    Closefd(clientFd, "rewriteFd close");
-    Closefd(serverFd, "contactFd close");
+    CloseFD(clientFd);
+    CloseFD(serverFd);
 
 }
