@@ -11,7 +11,7 @@
 #include <sys/ioctl.h>
 #include <string.h>
 
-#define ServerFIFO "FILE_FIFO"
+#define ServerFIFO "FILE.FIFO"
 
 #define PAGE_SIZE 4096
 
