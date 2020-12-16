@@ -21,6 +21,10 @@ struct Request {
 
 };
 
+void sigint(int a){
+    printf("\n ^C caught!!!\n");
+}
+
 void CloseFD(int fd) {
     if (close(fd) == -1) {
         perror("Server could not close the file");
@@ -41,7 +45,7 @@ int OpenFD(const char *name, int flags) {
 
 int main() {
     int serverFd, clientFd;
-
+    signal(SIGINT, sigint);
 
     umask(0);
     if (mkfifo(ServerFIFO, 0666) == -1 && errno != EEXIST) {
