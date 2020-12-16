@@ -90,5 +90,6 @@ int main(int argc, char *argv[]) {
 
     CloseFD(clientFd);
     CloseFD(serverFd);
+    unlink(ServerFIFO);
 
 }
