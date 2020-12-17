@@ -24,7 +24,7 @@ int Sem(int semId, int semNum, int initVal) {
     return semctl(semId, semNum, SETVAL, initVal);
 }
 
-void File_Translator(char *filename, int semid, void *addr) {
+void File(char *filename, int semid, void *addr) {
 
     FILE *flin = fopen(filename, "rb");
 
@@ -64,7 +64,7 @@ int main(int argc, char *argv[]) {
     int semid = semget(ftok(NAMETOFTOK, 10), 5, IPC_CREAT | 0666);
     int shmid = shmget(ftok(NAMETOFTOK, 10), PAGE_SIZE, IPC_CREAT | 0666);
     void *addr = shmat(shmid, NULL, 0);
-    File_Translator(argv[1], semid, addr);
+    File(argv[1], semid, addr);
     return 0;
 }
 
