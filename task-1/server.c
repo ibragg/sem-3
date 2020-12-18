@@ -27,9 +27,6 @@ void sigint(){
         printf("Error\n");
         exit(-1);
     }
-    else{
-        printf("Removed\n");
-    }
     exit(0);
 }
 
