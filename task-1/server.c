@@ -21,8 +21,16 @@ struct Request {
 
 };
 
-void sigint(int a){
+void sigint(){
     printf("\n ^C caught!!!\n");
+    if (remove (ServerFIFO) == -1){
+        printf("Remove error");
+        exit(-1);
+    }
+    else{
+        printf("Removed");
+    }
+    exit(0);
 }
 
 void CloseFD(int fd) {
@@ -106,4 +114,3 @@ int main() {
     }
     close(serverFd);
 }
-
