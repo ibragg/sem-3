@@ -53,7 +53,7 @@ int OpenFD(const char *name, int flags) {
 
 int main() {
     int serverFd, clientFd;
-    signal(SIGINT, sigint);
+    
 
     umask(0);
     if (mkfifo(ServerFIFO, 0666) == -1 && errno != EEXIST) {
@@ -63,7 +63,7 @@ int main() {
 
     serverFd = OpenFD(ServerFIFO, O_RDWR);
 
-    signal(SIGPIPE, SIG_IGN);
+    signal(SIGINT, sigint);
 
     for (;;) {
 
