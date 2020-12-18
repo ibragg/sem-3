@@ -24,11 +24,11 @@ struct Request {
 void sigint(){
     printf("\n ^C caught!!!\n");
     if (remove (ServerFIFO) == -1){
-        printf("Remove error");
+        printf("Error\n");
         exit(-1);
     }
     else{
-        printf("Removed");
+        printf("Removed\n");
     }
     exit(0);
 }
