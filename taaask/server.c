@@ -1,55 +1,105 @@
 #include <stdio.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <signal.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/wait.h>
 #include <errno.h>
-#include <sys/types.h>
-#include <sys/ipc.h>
-#include <sys/sem.h>
-#include <sys/shm.h>
+#include <sys/ioctl.h>
+#include <string.h>
 
-#define INIT(n, sem, op, flg) sops[n].sem_num = sem;                                  \
-                                                        sops[n].sem_op = op;                                    \
-                                                        sops[n].sem_flg = flg;
+#define ServerFIFO "FILE.FIFO"
 
+#define PAGE_SIZE 4096
 
-#define SEM(sem, op, flg)             INIT(0, sem, op, flg)                                 \
-                                                        semop(semid, sops, 1);
+struct Request {
+    pid_t pid;
+    char filename[256];
 
+};
 
-int Sem(int semId, int semNum, int initVal) {
-    return semctl(semId, semNum, SETVAL, initVal);
+void sigint(){
+    printf("\n ^C caught!!!\n");
+    if (remove (ServerFIFO) == -1){
+        printf("Error\n");
+        exit(-1);
+    }
+    exit(0);
 }
 
-void File(int semid, void *addr) {
-
-    struct sembuf sops[4];
-
-    INIT(0, 4, 0, 0);
-    semop(semid, sops, 1);
-
-    Sem(semid, 2, 2);
-
-    INIT(0, 0, -2, 0)
-    INIT(1, 0, 2, 0)
-    INIT(2, 4, 1, SEM_UNDO)
-    semop(semid, sops, 3);
-
-    int indicator = 4092;
-
-    while (indicator == 4092) {
-        SEM(3, -1, 0)
-        indicator = *(int *) addr;
-        write(STDOUT_FILENO, addr + 4, indicator);
-        SEM(2, 1, 0)
+void CloseFD(int fd) {
+    if (close(fd) == -1) {
+        perror("Server could not close the file");
+        exit(-1);
     }
 }
 
-int main(int argc, char *argv[]) {
-    int semid = semget(ftok("server.c", 10), 5, IPC_CREAT | 0666);
-    int shmid = shmget(ftok("server.c", 10), 4096, IPC_CREAT | 0666);
-    void *addr = shmat(shmid, NULL, 0);
+int OpenFD(const char *name, int flags) {
 
-    File(semid, addr);
-    return 0;
+    int fd;
+    if ((fd = open(name, flags)) < 0) {
+        printf("Server could not open %s\n", name);
+        exit(-1);
+    }
+    return fd;
+}
+
+
+int main() {
+    int serverFd, clientFd;
+
+
+    umask(0);
+    if (mkfifo(ServerFIFO, 0666) == -1 && errno != EEXIST) {
+        perror("mkfifo");
+        exit(-1);
+    }
+
+    serverFd = OpenFD(ServerFIFO, O_RDWR);
+
+    signal(SIGINT, sigint);
+
+    for (;;) {
+
+        char ClientFIFO[64];
+        struct Request request;
+
+        if (read(serverFd, &request, sizeof(struct Request)) < 0) {
+            perror("Some requests are incorrect");
+            continue;
+        }
+
+        sprintf(ClientFIFO, "%d.fifo", request.pid);
+
+        if ((clientFd = open(ClientFIFO, O_RDONLY)) < 0) {
+            perror("Could not contact with some clients");
+            continue;
+        }
+
+        char buf[PAGE_SIZE] = "";
+        int RD;
+
+        for (;;) {
+
+            if ((RD = read(clientFd, buf, PAGE_SIZE)) < 0) {
+                perror("Client could not read from FIFO");
+                exit(-1);
+            };
+            if (!RD) break;
+            if ((write(1, buf, RD)) < 0) {
+                perror("Client could not write correctly");
+                exit(-1);
+            };
+
+        }
+
+
+        close(clientFd);
+
+
+    }
+    close(serverFd);
 }
